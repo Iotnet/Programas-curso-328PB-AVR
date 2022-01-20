@@ -19,3 +19,14 @@ Consideraciones
 -   El modulo de comunicacion Wisol esta conectado al puerto UART0 del microcontrolador.
 -   En caso de usar baterias, se tienen señales para monitoreo del voltaje de salida de los reguladores. El regulador de 3.3V pone en alto el PIN PC0 si el voltaje de salida es menor al 92% de 3.3V. El pin PD7 cambia a alto si la tension de salida del regulador cae por debajo del 92% de 5V.
  
+Ejemplos
+--------
+- Boton y Led
+- Envio de mensaje (Holla mundo Sigfox)
+- Timmer
+- ADC
+- Modo Sleep para bajo consumo
+- Sensor I2C (TWI)
+- One wire (DSB18b20)
+- Sensor Serial (GPS, RS232, RS485)
+- Downlink
