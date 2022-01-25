@@ -1,6 +1,6 @@
 # Hola Mundo
 -------------
-En este ejemplo se muestra como configurar y hacer uso del puerto USART para la comunicacion con el modulo Wisol y enviar tramas de bytes por medio de Sigfox.
+En este ejemplo se muestra como configurar y hacer uso del puerto USART para la comunicacion con el modulo Wisol para el envio de tramas de bytes por medio de Sigfox.
 
 Requisitos
 ----------
