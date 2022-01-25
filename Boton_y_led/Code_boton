@@ -1,0 +1,37 @@
+#define F_CPU 8000000UL   //Frecuencia del cristal interno 8Mhz
+#include <avr/io.h>		//libreria para entradas / salidas
+#include <util/delay.h>  //libreria para la funcion delay
+#include <avr/interrupt.h>  //libreria para las interrupciones
+
+#define LED_ON		PORTB |= (1<<PORTB5)  //Poner el pin PB5 en alto
+#define LED_OFF		PORTB &= ~(1<<PORTB5) //Poner el pin PB5 en bajo
+#define SWITCH_PRESSED	!(PINB & (1<<PINB4))	
+
+ISR(PCINT0_vect)
+{
+	if (SWITCH_PRESSED)
+	{
+		LED_ON;
+	} 
+	else
+	{
+		LED_OFF;
+	}
+}
+
+
+int main(void)
+{
+	DDRB |= (1<<DDRB5);  //declarar el pin PB5 como salida
+	DDRB &= ~(1<<DDRB4);	//declarar el pin PB4 como entrada
+	PORTB |= (1<<DDRB4);	//habilitar resistencia pull-up en el pin PB4
+	
+	PCMSK0 |= (1<<PCINT4);	//declaracion interrupcion por PCINT4
+	PCICR |= (1<<PCIE0);	//habilitar interrupcion por cambio en pin
+	
+	sei();	
+	
+    while (1) 
+    {
+    }
+}
