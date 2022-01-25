@@ -32,7 +32,7 @@ Recomendaciones
 Ejemplos
 --------
 - [Boton y Led](https://github.com/Iotnet/Iotrack/tree/main/Boton_y_led)
-- Envio de mensaje (Holla mundo Sigfox)
+- Envio de mensaje (Hola mundo)
 - Timmer
 - ADC
 - Modo Sleep para bajo consumo
