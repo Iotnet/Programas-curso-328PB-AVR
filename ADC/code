@@ -1,0 +1,182 @@
+define F_CPU 8000000UL
+#define BAUDRATE 9600
+#define BAUD_PRESCALLER (((F_CPU / (BAUDRATE * 16UL))) - 1)
+
+#include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+#include <avr/sleep.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+//************************************PARAMETROS*************************************************************
+#define minutos 1   //tiempo de transmision en minutos
+#define comp_seg 8  //segundos que dura despierto el mcu para restarlos y disminuir el desfase 
+#define canal_ADC 3 //canal del ADC a leer
+//***********************************************************************************************************
+
+char String1[]="AT$RC\n\r";
+char String2[]="AT$SF=";
+char String3[]="\n\r";
+
+volatile uint8_t sendflag = 0;
+volatile unsigned int millis = 0;
+volatile uint16_t average=0;
+
+void sleepWakeup(void);
+void timmer2_init(void);
+void ADC_init(void);
+uint16_t read_adc(uint8_t channel);
+char* add_int(unsigned int var);
+uint16_t average_ADC(void);
+void read_and_send(void);
+void USART_init(void);
+unsigned char USART_receive(void);
+void USART_send( unsigned char data);
+void USART_putstring(char* StringPtr);
+
+int main(void)
+{
+	DDRC |= (1<<DDRC1); //PC1 como salida(para habilitar salida 3.3v)
+	cli(); 	// Clear interrupts
+	USART_init();		//inicializar UASRT
+	timmer2_init();		//inicializar timmer
+	ADC_init();			//inicializar ADC
+	
+	read_and_send();
+
+	sei();
+	while(1)
+	{
+		sleepWakeup();		
+		if (sendflag==1)
+		{
+			read_and_send();
+		}
+	}
+}
+
+ISR( TIMER2_OVF_vect ){
+	//cada 1/3 seg
+	millis++;
+}
+
+void sleepWakeup(void)
+{
+	unsigned int seg=(minutos*60)-(comp_seg);
+	if(millis >= seg)
+	{
+		SMCR &= ~(1 << SE); // Disabling sleep
+		sendflag=1;
+		//millis = 0;
+	}
+}
+void timmer2_init(void)
+{
+	TIMSK2 = 0;
+	ASSR |= (1 << AS2); // Habilitar modo asincrono
+	TCNT2 = 0;  //set initial counter value
+	// Init counter
+	OCR2A = 128 + 1;  OCR2B = 0;
+	TCCR2A = 0; TCCR2B = 0; // Initialize TIMER2
+	TCCR2B |= (1 << CS22) | (0 << CS21) | (1 << CS20); // Setup Prescaler = 128
+	TIMSK2 |= (1 << TOIE2) | (0 << OCIE2A) | (0 << OCIE2B);
+	while (ASSR & ((1<<TCN2UB)|(1<<TCR2BUB))); 	// Wait for registers update
+}
+void ADC_init(void)
+{
+	ADMUX |= (1<<REFS0);
+	ADCSRA |= (1<<ADEN) | (1<<ADSC) | (1<<ADPS2) | (1<<ADPS1);
+	while(ADCSRA & (1<<ADSC));            //Wait until the conversion is done
+}
+
+uint16_t read_adc(uint8_t channel)
+{
+	ADMUX &= 0xF0;                    //Clear the older channel that was read
+	ADMUX |= channel;                //Defines the new ADC channel to be read
+	ADCSRA |= (1<<ADSC);                //Starts a new conversion
+	while(ADCSRA & (1<<ADSC));            //Wait until the conversion is done
+	return ADCW;                    //Returns the ADC value of the chosen channel
+}
+char* add_int(unsigned int var)
+{
+	char buffer[sizeof(unsigned int)*8+1];
+	char temp[17];
+	div_t div_result;
+	strcpy(temp,String2);
+	utoa(var,buffer,16);
+	div_result= div(strlen(buffer),2);
+	if (div_result.rem==0)
+	{
+		if (strlen(buffer)==2)
+		{
+			strcat(temp,"00");
+		}
+		strcat(temp,buffer);
+		return(strcat(temp,String3));
+	}
+	else
+	{
+		if (strlen(buffer)==1)
+		{
+			strcat(temp,"000");
+		}
+		else if (strlen(buffer)==3)
+		{
+			strcat(temp,"0");
+		}
+		strcat(temp,buffer);
+		return(strcat(temp,String3));
+	}
+}
+uint16_t average_ADC(void)
+{
+	//Promediado de muestras
+	uint16_t temp1=0;
+	uint16_t temp2;
+	for (uint8_t i=0;i<16;i++)  //numero de muestras
+	{
+		temp1+=read_adc(canal_ADC);
+		_delay_ms(100);
+	}
+	temp2=temp1>>4;  //cuatro corrimientos equivalen a dividir por 16
+	return(temp2);
+}
+void read_and_send(void)
+{
+	PORTC |= (1<<PORTC1); //encender regulador 3.3
+	_delay_ms(1500);	
+	USART_putstring(String1);  //AT$RC
+	_delay_ms(200);
+	
+	average=average_ADC();    //toma y promedio de muestras
+	USART_putstring(add_int(average));   //envio de la lectura
+	
+	_delay_ms(4000);
+	PORTC &= ~(1<<PORTC1);  //apagar reguladores
+	_delay_ms(500);
+	millis = 0;
+	sendflag = 0;
+}
+void USART_init(void){
+	UBRR0H = (uint8_t)(BAUD_PRESCALLER>>8);
+	UBRR0L = (uint8_t)(BAUD_PRESCALLER);
+	UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+}
+
+unsigned char USART_receive(void){
+	while(!(UCSR0A & (1<<RXC0)));
+	return UDR0;
+}
+
+void USART_send( unsigned char data){
+	while(!(UCSR0A & (1<<UDRE0)));
+	UDR0 = data;
+}
+void USART_putstring(char* StringPtr){
+	while(*StringPtr != 0x00){
+		USART_send(*StringPtr);
+	StringPtr++;}
+}
