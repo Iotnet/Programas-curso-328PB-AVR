@@ -3,7 +3,7 @@
 
 Este ejemplo muestra como encender un led cuando se presiona el boton utilizando interrupciones.
 
-Requisistos
+Requisitos
 ------------
 - Led
 - Resistencia entre 330 ohms y 1k
