@@ -1,0 +1,216 @@
+#define F_CPU 8000000UL
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#define BAUDRATE 9600
+#define BAUD_PRESCALLER (((F_CPU / (BAUDRATE * 16UL))) - 1)
+
+//Declaration of our functions
+void USART_init(void);
+void USART_stop(void);
+unsigned char USART_receive(void);
+char * USART_receiveString(void);
+char * readPaylod(void);
+void USART_FlushRX( void );
+void USART_send( unsigned char data);
+char* add_int(unsigned long int var);
+void USART_putstring(char* StringPtr);
+void sendDownRequest(void);
+unsigned long BytesToInteger(char *payloadRaw);
+
+/******************************************************************************
+*                                 TEMP DEFINITIONS                            *
+*******************************************************************************/
+unsigned char dummy;
+/******************************************************************************
+*******************************************************************************/
+
+char String1[]="AT$RC\n\r";
+char String2[]="AT$SF=";
+char String3[]="\n\r";
+char strRequest[] = "AT$SF=0102030405,1\n\r";
+
+char *stringData = "0";
+unsigned long int dataInt = 0;
+unsigned long int retDataInt = 0;
+
+/** ---------------------------------------  MAIN STARTS HERE --------------------------------------------------------------**/
+/******************************************************************************
+*                                 MAIN FUNCTION                               *
+*******************************************************************************/
+int main(void){
+	//cli();
+	USART_init();        //Call the USART initialization code
+	//sei();
+	DDRC  |= (1<<DDRC1); // Set Pin13 as output (1 output, 0 input)
+	PORTC &= ~(1<<PORTC1); // Turnoff Wisol module
+	//while (1)
+	//{
+	sendDownRequest();
+	USART_putstring( stringData );
+	//USART_send( stringData[16] );
+	USART_putstring(String3);
+	_delay_ms(1000);
+	PORTC &= ~(1<<PORTC1); // Stop Wisol module
+	_delay_ms(5000);
+	retDataInt = BytesToInteger(stringData);
+	if(retDataInt <= 9)
+	{
+		for(int i=1; i<= retDataInt; i++)
+		{
+			PORTC = (1<<PORTC1); // Start Wisol module
+			_delay_ms(500);
+			PORTC &= ~(1<<PORTC1); // Stop Wisol module
+			_delay_ms(500);
+		}
+	}
+	USART_stop();
+	_delay_ms(100);
+	_delay_ms(15000);     // Waiting for the wisol to be ready
+	//}
+	while(1)
+	{
+	}
+	return 0;
+}
+/******************************************************************************
+*                          DownLink PETITION                                  *
+*******************************************************************************/
+void sendDownRequest(void){
+	USART_init();
+	_delay_ms(100);
+	PORTC = (1<<PORTC1); // Start Wisol module
+	_delay_ms(3000);
+	USART_putstring(String1);    //Send downlink petition
+	_delay_ms(500);
+	USART_putstring(strRequest);    //Send downlink petition
+	_delay_ms(100);
+	_delay_ms(1000);
+	USART_FlushRX();
+	readPaylod();
+}
+
+/******************************************************************************
+*                                 SERIAL COMMUNICATION FUNCTION               *
+*******************************************************************************/
+void USART_init(void){
+	UBRR0H = (uint8_t)(BAUD_PRESCALLER>>8);
+	UBRR0L = (uint8_t)(BAUD_PRESCALLER);
+	UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+	UCSR0C = (3<<UCSZ00);
+}
+void USART_stop(void){
+	UCSR0B &= ~(1<<RXEN0);
+	UCSR0B &= ~(1<<TXEN0);
+}
+
+/******************************************************************************
+*                                 RECEIVE CHARACTER                              *
+*******************************************************************************/
+unsigned char USART_receive(void){
+	while(!(UCSR0A & (1<<RXC0))) {;}; // Wait for data to be received
+	return UDR0;
+}
+
+/******************************************************************************
+*                                 RECEIVE STRING                              *
+*******************************************************************************/
+char * readPaylod(void){
+	char data; int i=0;
+	for(i=0; i<32;i++)
+	{
+		data = USART_receive();
+		if(i >=4) // Start from character 4 to avoid line feed, and carriage return
+		{
+			stringData[i-4] = data;
+		}
+	}
+	stringData[i] = '\0';
+	return stringData;
+}
+
+void USART_FlushRX(void){
+	while( UCSR0A & (1<<RXC0) )	dummy = UDR0;
+}
+
+/******************************************************************************
+*                                 SEND CHARACTER                              *
+*******************************************************************************/
+void USART_send(unsigned char data){
+	while(!(UCSR0A & (1<<UDRE0)));  // Wait for empty transmit buffer
+	UDR0 = data;
+}
+
+/******************************************************************************
+*                                 SEND STRING                             *
+*******************************************************************************/
+void USART_putstring(char* StringPtr){
+	while(*StringPtr != 0x00){
+		USART_send(*StringPtr);
+	StringPtr++;}
+}
+
+/******************************************************************************
+*                                 CONVERT INT TO HEX AND ACCOMODATE            *
+*******************************************************************************/
+unsigned long BytesToInteger(char *payloadRaw){
+	char byteRaw[20]="0";
+	for(int i=3; i<5; i++){
+		byteRaw[i-3] = payloadRaw[i];
+	}
+	//strncpy(byteRaw,payloadRaw,2);  // Copy the first byte
+	return dataInt = strtoul(byteRaw, NULL, 16);
+}
+
+char* add_int(unsigned long int var)
+{
+	char buffer[sizeof(unsigned long int)*8+1];
+	char temp[18];
+	div_t div_result;
+	strcpy(temp,String2);
+	ltoa(var,buffer,16);
+	div_result= div(strlen(buffer),2);
+	if (div_result.rem==0)
+	{
+		if (strlen(buffer)==2)
+		{
+			strcat(temp,"0000");
+		}
+		if (strlen(buffer)==4)
+		{
+			strcat(temp,"00");
+		}
+		strcat(temp,buffer);
+		return(strcat(temp,String3));
+	}
+	else
+	{
+		if (strlen(buffer)==1)
+		{
+			strcat(temp,"0000");
+		}
+		if (strlen(buffer)==3)
+		{
+			strcat(temp,"00");
+		}
+		if(strlen(buffer)>6)
+		{
+			char * usefulBytes;
+			if(strlen(buffer)==7){
+				usefulBytes = buffer + 1;
+			}
+			if(strlen(buffer)==8){
+				usefulBytes = buffer + 2;
+			}
+			strcat(temp,usefulBytes);
+			return(strcat(temp,String3));
+		}
+		strcat(temp,"0");
+		strcat(temp,buffer);
+		return(strcat(temp,String3));
+	}
+}
