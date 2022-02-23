@@ -1,0 +1,17 @@
+#define F_CPU 8000000UL   //Frecuencia del cristal interno 8Mhz
+#include <avr/io.h>		//libreria para entradas / salidas
+#include <util/delay.h>  //libreria para la funcion delay
+
+
+int main(void)
+{
+	DDRC |= (1<<DDRC1); 
+    /* Replace with your application code */
+    while (1) 
+    {
+		PORTC |= (1<<PORTC1); //encender regulador 3.3
+		_delay_ms(1000);
+		PORTC &= ~(1<<PORTC1);
+		_delay_ms(1000);
+    }
+}
