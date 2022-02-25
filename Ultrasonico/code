@@ -1,0 +1,169 @@
+#define F_CPU 8000000UL
+#define BAUDRATE 9600
+#define BAUD_PRESCALLER (((F_CPU / (BAUDRATE * 16UL))) - 1)
+
+#include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+#include <avr/sleep.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <util/atomic.h>
+
+char String1[]="AT$RC\n\r";
+char String2[]="AT$SF=";
+char String3[]="\n\r";
+
+int TempDistance = 36; //temp distance to check if parked
+uint16_t TimesStill = 0;//counter to see if parked
+int Margin =3; //Margin of error for parking
+int SavedDistance; //to hold the saved parking distance
+enum {ReadyToPing,PingSent,WaitingForEcho,PingReceived,Waiting60ms};
+volatile char currentState=0;
+volatile uint16_t  numuS;
+
+/*******************************************INITALIZE PORTS, TIMER, AND INTURRUPTS*******************************************/
+void init() 
+{
+	DDRC |= (1<<DDRC1); //PC1 como salida(para habilitar salida 3.3v)
+	DDRE |= (1<<DDRE3);  //PE3 como salida(para habilitar salida 5v)
+	DDRB |= (1<<DDRB5); //PB5 como salida(trigger)
+	
+	DDRB &= ~(1<<DDB4); // Set Pin B4 as input to read Echo
+	PORTB |= (1<<PORTB4); // Enable pull up on B4
+	
+	PORTB &= ~(1<<PORTB5); // Init B5 as low (trigger)
+
+	TCCR1B |= (1<<CS11) | (1<<WGM12); // CTC Timer with prescaller 8
+	TCCR1B |= (1<<ICES1); // First capture on rising edge
+	TIMSK1 |= (1<<OCIE1A); //Compare A interrupt
+	OCR1A = 0x16A8; // set to 200-max for HC-SR04 measurement
+	PCICR = (1<<PCIE0); // Enable PCINT we use pin B4 which is PCINT4
+	PCMSK0 = (1<<PCINT4); // Enable C5 interrupt
+}
+void USART_init(void){
+	UBRR0H = (uint8_t)(BAUD_PRESCALLER>>8);
+	UBRR0L = (uint8_t)(BAUD_PRESCALLER);
+	UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+}
+
+unsigned char USART_receive(void){
+	while(!(UCSR0A & (1<<RXC0)));
+	return UDR0;
+}
+
+void USART_send( unsigned char data){
+	while(!(UCSR0A & (1<<UDRE0)));
+	UDR0 = data;
+}
+void USART_putstring(char* StringPtr){
+	while(*StringPtr != 0x00){
+		USART_send(*StringPtr);
+	StringPtr++;}
+}
+void add_float(char* payload, const float* var1, uint8_t append_state)
+{
+	char temp1[20];
+	char temp2[9];
+	char buffer[33];
+	unsigned char ch[4];
+	memmove(ch,var1,4);
+	//strcpy(temp1,String2);
+	for (int i=0;i<4;i++)
+	{
+		utoa(ch[i],buffer,16);
+		if (strlen(buffer)==1)
+		{
+			strcat(payload,"0");
+			strcat(payload,buffer);
+		}
+		else
+		{
+			strcat(payload,buffer);
+		}
+	}
+	//strcat(payload,String3);
+	if(append_state)
+	{
+		strcat(payload,String3);
+	}
+	//return(strcat(temp1,temp2));
+}
+void send_data(uint16_t uStime)
+{
+	char payload[25];
+	memset(payload,00,25);
+	strcpy(payload,String2);
+
+	float f1=uStime/58.2;
+	float *fpointer1;
+
+	fpointer1=&f1;
+	add_float(payload,fpointer1,1);
+	
+	PORTC |= (1<<PORTC1); //encender regulador 3.3
+	_delay_ms(1500);
+	USART_putstring(String1);  //AT$RC
+	_delay_ms(200);
+	USART_putstring(payload);
+	_delay_ms(4000);
+	PORTC &= ~(1<<PORTC1);
+	//PORTE &= ~(1<<PORTE3);
+	_delay_ms(500);
+	
+}
+/*******************************************MAIN PROGRAM*******************************************/
+int main()
+{
+	init();
+	USART_init();
+	
+	PORTE |= (1<<PORTE3);
+	_delay_ms(10000);
+
+	sei(); // Enable Global Interrupts
+	
+	while (1) 
+	{
+		switch (currentState)
+		{
+			case ReadyToPing:
+				//OCR1A=0x10; //Set to 10us for trigger pulse
+				PORTB |= (1<<PORTB5);
+				_delay_us(11);
+				PORTB &= ~(1<<PORTB5); //turn off pulse
+				TCNT1 = 0;
+				currentState =PingSent;
+			break;
+			case PingReceived:
+				ATOMIC_BLOCK (ATOMIC_FORCEON)
+				{
+					send_data(numuS);
+					currentState= ReadyToPing;
+				}
+				_delay_ms(60000);
+			break;
+			case PingSent:
+			break;
+		}
+	}
+}
+/*******************************************INTURRUPT PCINT1 FOR PIN C5*******************************************/
+ISR(PCINT0_vect)
+{
+	if ((PINB & (1<<PINB4))	) { // Checks if echo is high
+	TCNT1 = 0; // Reset Timer
+	}
+	else
+	{
+		numuS = TCNT1; // Save Timer value
+		currentState=PingReceived;
+	}
+}
+
+ISR(TIMER1_COMPA_vect) 
+{ //General timer
+	currentState= ReadyToPing;
+}
