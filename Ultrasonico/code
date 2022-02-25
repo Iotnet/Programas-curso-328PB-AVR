@@ -15,10 +15,6 @@ char String1[]="AT$RC\n\r";
 char String2[]="AT$SF=";
 char String3[]="\n\r";
 
-int TempDistance = 36; //temp distance to check if parked
-uint16_t TimesStill = 0;//counter to see if parked
-int Margin =3; //Margin of error for parking
-int SavedDistance; //to hold the saved parking distance
 enum {ReadyToPing,PingSent,WaitingForEcho,PingReceived,Waiting60ms};
 volatile char currentState=0;
 volatile uint16_t  numuS;
@@ -38,7 +34,7 @@ void init()
 	TCCR1B |= (1<<CS11) | (1<<WGM12); // CTC Timer with prescaller 8
 	TCCR1B |= (1<<ICES1); // First capture on rising edge
 	TIMSK1 |= (1<<OCIE1A); //Compare A interrupt
-	OCR1A = 0x16A8; // set to 200-max for HC-SR04 measurement
+	OCR1A = 0x9999; // set to 200-max for HC-SR04 measurement
 	PCICR = (1<<PCIE0); // Enable PCINT we use pin B4 which is PCINT4
 	PCMSK0 = (1<<PCINT4); // Enable C5 interrupt
 }
@@ -121,7 +117,7 @@ int main()
 	USART_init();
 	
 	PORTE |= (1<<PORTE3);
-	_delay_ms(10000);
+	_delay_ms(5000);
 
 	sei(); // Enable Global Interrupts
 	
@@ -138,11 +134,12 @@ int main()
 				currentState =PingSent;
 			break;
 			case PingReceived:
-				ATOMIC_BLOCK (ATOMIC_FORCEON)
-				{
-					send_data(numuS);
-					currentState= ReadyToPing;
-				}
+				send_data(numuS);
+				currentState= ReadyToPing;
+				_delay_ms(60000);
+				_delay_ms(60000);
+				_delay_ms(60000);
+				_delay_ms(60000);
 				_delay_ms(60000);
 			break;
 			case PingSent:
