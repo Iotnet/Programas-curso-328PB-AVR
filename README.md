@@ -1,9 +1,9 @@
-# 
+# AVR 328PB codigos
 
 
 Introduccion
 --------------
-En este repositorio se muestra la información relacionada al uso del dispositivo Iotrack asi como ejemplos de programas.
+En este repositorio se muestra la información relacionada al uso del dispositivo. Ademas de ejemplos de codigos del micro 328PB con Atmel Studio.
 
 Requerimientos
 --------------
